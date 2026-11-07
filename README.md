@@ -1,56 +1,76 @@
-# Welcome to your Expo app 👋
+# MyHealth — patient app (Expo)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+The MyHealth patient app, built to the design in `../ui` (`ui/README.md` is the spec, `ui/screens/*.dc.html` the mockups).
+Expo SDK 58, React Native 0.88, expo-router, TypeScript strict.
 
-## Get started
+> **Demo data.** This project has no portal API client yet. Every screen reads through
+> `src/data/api.ts`, whose functions are named after the `/api/v1/portal/*` endpoint they stand in
+> for and currently return the in-memory data in `src/data/demo.ts`. Replace those bodies with real
+> calls (and delete `demo.ts`) to go live. Nothing is stored on the device.
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Run
 
 ```bash
-npm run reset-project
+pnpm install
+pnpm start          # then press w (web), i (iOS) or a (Android)
+pnpm typecheck
+pnpm test           # Vitest: formatting, range bar, trend chart and result-wording helpers
+npx eslint .
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+Demo sign-in (dev builds only): the email is prefilled, any password of 8+ characters works, and
+the code is shown under the code boxes. "Simulate a scan" on Activate fills the card details.
 
-### Other setup steps
+## Layout
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+| Path | What |
+| --- | --- |
+| `src/ui/theme.ts` | Design tokens: light/dark palettes, spacing, radii, elevation, Figtree type scale |
+| `src/ui/ThemeProvider.tsx` | `useTheme()`: follows the system, with a System / Light / Dark override (Profile) |
+| `src/ui/*` | Primitives: `Screen`, `PageTitle`, `Header`, `Section`, `Card`, `Button`, `IconButton`, `Chip`/`ChipGroup`, `SegmentedControl`, `Badge`, `ListRow`, `KeyValueRow`, `Switch`, `Checkbox`, `TextField`, `RangeBar`, `TrendChart`, `EmptyState`, `Notice`, `BottomActionBar`, `Avatar`, floating `TabBar` |
+| `src/domain/results.ts` | Result-flag wording (colour + icon + words), grouping, exact allergy wording |
+| `src/lib/format.ts` | Dates in the clinic time zone (from `GET /portal/me`), money |
+| `src/lib/session.tsx` | Demo session (see the rules in its header before wiring real auth) |
+| `src/data/` | `types.ts` (response shapes), `api.ts` (endpoint stand-ins), `demo.ts` (mock data), `useApi` |
+| `src/app/` | Routes (below) |
 
-## Learn more
+## Screens
 
-To learn more about developing your project with Expo, look at the following resources:
+| Design # | Route | Status |
+| --- | --- | --- |
+| 01 Sign in + code | `/sign-in` | Built. Fingerprint button left out (D5). "Trust this phone" left out (web-only). |
+| 02 Home | `/(tabs)/index` | Built |
+| 03 Results | `/(tabs)/results` | Built, with the "Outside usual range" filter |
+| 04 Result detail | `/results/[id]` | Built, with the trend chart (per-sample usual range) |
+| 05 Book a visit | `/book` | Built |
+| — Visits tab | `/(tabs)/visits` | Built (upcoming + past, links to Book) |
+| 06 Medicines | `/(tabs)/medicines` | Built: prescriptions and allergies only |
+| 07 Messages | `/(tabs)/messages`, `/messages/[id]` | Built; opening a message marks it read |
+| 08 Profile | `/profile` | Built, with the theme picker and sign-out |
+| 09 Bills | `/bills` | Built; "Pay online" only when `onlinePayment.available` |
+| 10 Notifications | `/notifications` | Channel matrix and "Sent to" built |
+| 11 Check-in QR | `/qr` | Built; QR drawn locally from the key (`qrcode-generator`) |
+| 12 Scan card → activate | `/activate` | Built without a live camera (see below) |
+| 13–14 Online consult, video | `/consult` | Placeholder only — needs D8. Keeps the 911 red-flag copy. |
+| 15–17 Dark | all | Dark tokens applied everywhere |
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### Needs API (left out, not faked)
 
-## Join the community
+- Medicine "Today" check-offs, the "Reminders on" pill, and the "Supply left" bar.
+- Health-facts explainer per test and "Down 1.2 points since…" on result detail.
+- Result search; result/invoice/receipt/e-prescription PDFs ("Share or download", "Invoice PDF"…).
+- Compose a new message ("New message"); the API only lists and marks read.
+- Change or cancel a booked visit.
+- Edit contact details from the app.
+- `src/data/types.ts` is modelled on the screens — check every field against `docs/architecture/portal-app.md`.
 
-Join our community of developers creating universal apps.
+### Needs decision
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- **D5** biometric unlock ("Use fingerprint").
+- **D8** online consultation in the app vs. MyHealth in the browser (screens 13–14).
+- **D9** device permissions: camera for the card scan (`expo-camera`), calendar for "Add to calendar", push for medicine reminders and "Send a test notification" (`expo-notifications`).
+- Storage module for the theme override (expo-secure-store or AsyncStorage); it is in memory for now.
+
+### Not in this build yet
+
+Forms to sign (`/forms`), People I care for (`/people`) and the acting-for banner, Privacy and consents, and Security settings screens.
