@@ -8,13 +8,13 @@
     "scheme": "myhealth",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "bundleIdentifier": "ph.healthcare.myhealth"
     },
     "android": {
       "package": "ph.healthcare.myhealth",
       "adaptiveIcon": {
-        "backgroundColor": "#E0F2F2",
+        "backgroundColor": "#1E7A8C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -32,10 +32,12 @@
         {
           "backgroundColor": "#1E7A8C",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76,
+          "imageWidth": 200,
           "dark": {
-            "backgroundColor": "#0D1A1F"
-          }
+            "backgroundColor": "#0D1A1F",
+            "image": "./assets/images/splash-icon.png"
+          },
+          "resizeMode": "contain"
         }
       ],
       "expo-secure-store",
