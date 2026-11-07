@@ -10,16 +10,17 @@ import { DarkTheme, DefaultTheme, router, Stack, ThemeProvider as NavThemeProvid
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { CloudOff, Settings } from 'lucide-react-native';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { configureForegroundNotices, notifications, pushAvailable } from '@/lib/native-push';
 import { pushRoute } from '@/lib/push-route';
 import { SessionProvider, useSession } from '@/lib/session-provider';
 import { EmptyState, Loading, ThemeProvider, useTheme } from '@/ui';
 
-// Keep the splash screen up until Figtree is loaded.
+// Keep the native splash up until Figtree is loaded; the animated copy (AnimatedSplash) then takes over and hides it.
 SplashScreen.preventAutoHideAsync();
 // A notice arriving while the app is open shows as a quiet banner (no-op in Expo Go and on the web).
 configureForegroundNotices();
@@ -84,6 +85,14 @@ function OpenFromNotification({ signedIn }: { signedIn: boolean }) {
   return null;
 }
 
+/** The animated splash over the app until the session is restored (signed in, signed out or an error to show). */
+function SplashHandOff() {
+  const { state } = useSession();
+  const [showing, setShowing] = useState(true);
+  const done = useCallback(() => setShowing(false), []);
+  return showing ? <AnimatedSplash ready={state.status !== 'starting'} onDone={done} /> : null;
+}
+
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     Figtree_400Regular,
@@ -93,10 +102,6 @@ export default function RootLayout() {
     Figtree_800ExtraBold,
   });
 
-  useEffect(() => {
-    if (loaded || error) SplashScreen.hideAsync();
-  }, [loaded, error]);
-
   if (!loaded && !error) return null;
 
   return (
@@ -104,6 +109,7 @@ export default function RootLayout() {
       <ThemeProvider>
         <SessionProvider>
           <RootStack />
+          <SplashHandOff />
         </SessionProvider>
       </ThemeProvider>
     </SafeAreaProvider>
