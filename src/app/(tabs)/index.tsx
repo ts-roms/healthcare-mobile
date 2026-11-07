@@ -6,8 +6,10 @@ import { NextVisitCard } from '@/components/NextVisitCard';
 import { ResultCompactCard, ResultHeroCard } from '@/components/ResultCards';
 import * as api from '@/data/api';
 import { useApi } from '@/data/useApi';
+import { newestOrder } from '@/domain/results';
+import { medicineName } from '@/domain/wording';
 import { formatLongToday, formatTime, greeting, isSameClinicDay } from '@/lib/format';
-import { useMe } from '@/lib/me';
+import { useMe } from '@/lib/session-provider';
 import { Avatar, Badge, Card, IconButton, ListRow, Loading, PageTitle, Screen, Section, Text, useTheme } from '@/ui';
 
 export default function HomeScreen() {
@@ -16,25 +18,28 @@ export default function HomeScreen() {
   const now = new Date();
 
   const { data } = useApi(async () => {
-    const [appointments, results, prescriptions, teleconsults, unread] = await Promise.all([api.getAppointments(), api.getResults(), api.getPrescriptions(), api.getTeleconsults(), api.getUnreadCount()]);
-    return { appointments, results, prescriptions, teleconsults, unread };
+    const [appointments, results, prescriptions, teleconsults, notices] = await Promise.all([api.getAppointments(), api.getResults(), api.getPrescriptions(), api.getTeleconsults(), api.getMessages()]);
+    return { appointments, results, prescriptions, teleconsults, notices, unread: notices.filter((n) => !n.readAt).length };
   });
 
-  const nextVisit = data?.appointments.find((a) => a.status === 'booked' && new Date(a.startsAt) > now);
-  const consultToday = data?.teleconsults.find((t) => isSameClinicDay(t.startsAt, now, timeZone));
-  const newResults = data?.results.filter((r) => r.isNew) ?? [];
-  const activeRx = data?.prescriptions.filter((p) => p.status === 'active') ?? [];
+  const nextVisit = data?.appointments.upcoming.filter((a) => a.status !== 'cancelled').sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
+  const consultToday = data?.teleconsults.find((t) => t.status !== 'ended' && isSameClinicDay(t.startsAt, now, t.timeZone));
+  // The API has no per-result "new" flag: Home shows the newest order, marked new while its results-ready notice is unread.
+  const latest = data ? newestOrder(data.results) : [];
+  const unseen = !!data?.notices.some((n) => n.templateKey === 'lab.results-available' && !n.readAt);
+  const newCount = unseen ? latest.length : 0;
+  const medicines = data?.prescriptions.flatMap((p) => p.items.map(medicineName)) ?? [];
 
   const header = (
     <PageTitle
       eyebrow={formatLongToday(now, timeZone)}
-      title={me ? `${greeting(now, timeZone)}, ${me.patient.firstName}` : greeting(now, timeZone)}
+      title={me ? `${greeting(now, timeZone)}, ${me.patient.givenName}` : greeting(now, timeZone)}
       right={
         <>
           <IconButton icon={Bell} label={data?.unread ? `Messages, ${data.unread} new` : 'Messages'} badge={!!data?.unread} onPress={() => router.navigate('/messages')} />
           <Link href="/profile" asChild>
             <Pressable accessibilityRole="button" accessibilityLabel="Profile" hitSlop={4}>
-              <Avatar initials={me?.patient.initials ?? ''} bg={scheme === 'dark' ? colors.primarySubtle : colors.primaryDeep} fg={scheme === 'dark' ? colors.primaryDeep : '#FFFFFF'} />
+              <Avatar initials={me ? `${me.patient.givenName[0] ?? ''}${me.patient.familyName[0] ?? ''}`.toUpperCase() : ''} bg={scheme === 'dark' ? colors.primarySubtle : colors.primaryDeep} fg={scheme === 'dark' ? colors.primaryDeep : '#FFFFFF'} />
             </Pressable>
           </Link>
         </>
@@ -49,15 +54,15 @@ export default function HomeScreen() {
       ) : (
         <>
           {consultToday ? (
-            <Pressable accessibilityRole="link" onPress={() => router.push('/consult')} style={({ pressed }) => [styles.banner, { backgroundColor: colors.primarySubtle, opacity: pressed ? 0.85 : 1 }]}>
+            <Pressable accessibilityRole="link" onPress={() => router.push({ pathname: '/consult', params: { id: consultToday.appointmentId } })} style={({ pressed }) => [styles.banner, { backgroundColor: colors.primarySubtle, opacity: pressed ? 0.85 : 1 }]}>
                 <View style={[styles.bannerIcon, { backgroundColor: colors.primary }]}>
                   <Video size={22} color={colors.onPrimary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text weight={700}>Online consultation today · {formatTime(consultToday.startsAt, timeZone)}</Text>
+                  <Text weight={700}>Online consultation today · {formatTime(consultToday.startsAt, consultToday.timeZone)}</Text>
                   <Text variant="caption" muted>
-                    {consultToday.doctorName}
-                    {consultToday.questionsPending ? ` · answer ${consultToday.questionsPending} questions first` : ''}
+                    {consultToday.practitionerName}
+                    {consultToday.questionnaireSubmitted ? '' : ' · answer the questions first'}
                   </Text>
                 </View>
                 <Text variant="caption" weight={700} color={colors.link}>
@@ -66,19 +71,19 @@ export default function HomeScreen() {
             </Pressable>
           ) : null}
 
-          {nextVisit ? <NextVisitCard appointment={nextVisit} timeZone={timeZone} now={now} /> : null}
+          {nextVisit ? <NextVisitCard appointment={nextVisit} now={now} /> : null}
 
           <View style={styles.quick} accessibilityLabel="Quick actions">
             <QuickAction href="/book" icon={CalendarPlus} label="Book a visit" tint="teal" />
-            <QuickAction href="/results" icon={FlaskConical} label="Results" tint="amber" count={newResults.length} />
+            <QuickAction href="/results" icon={FlaskConical} label="Results" tint="amber" count={newCount} />
             <QuickAction href="/bills" icon={ReceiptText} label="Bills" tint="blue" />
             <QuickAction href="/messages" icon={MessageSquare} label="Ask the clinic" tint="violet" />
           </View>
 
-          {newResults.length ? (
+          {latest.length ? (
             <Section
-              title="New results"
-              titleAccessory={<Badge label={`${newResults.length} new`} tone="danger" />}
+              title={newCount ? 'New results' : 'Latest results'}
+              titleAccessory={newCount ? <Badge label={`${newCount} new`} tone="danger" /> : undefined}
               right={
                 <Link href="/results" asChild>
                   <Pressable accessibilityRole="link" hitSlop={10}>
@@ -88,8 +93,8 @@ export default function HomeScreen() {
                   </Pressable>
                 </Link>
               }>
-              <ResultHeroCard result={newResults[0]} timeZone={timeZone} />
-              {newResults.slice(1).map((r) => (
+              <ResultHeroCard result={latest[0]} timeZone={timeZone} />
+              {latest.slice(1).map((r) => (
                 <ResultCompactCard key={r.id} result={r} timeZone={timeZone} />
               ))}
               <View style={styles.inline}>
@@ -109,8 +114,8 @@ export default function HomeScreen() {
 
           <Section title="My records">
             <Card padded={false}>
-              <ListRow divider={false} icon={Pill} title="Prescriptions" subtitle={activeRx.length ? `${activeRx.map((p) => p.drug).join(', ')} · active` : 'No active prescriptions'} href="/medicines" />
-              <ListRow icon={FlaskConical} title="Results history" subtitle={`${data.results.length} results released`} href="/results" />
+              <ListRow divider={false} icon={Pill} title="Prescriptions" subtitle={medicines.length ? `${medicines.join(', ')} · active` : 'No active prescriptions'} href="/medicines" />
+              <ListRow icon={FlaskConical} title="Results history" subtitle={`${data.results.length} result${data.results.length === 1 ? '' : 's'} released`} href="/results" />
             </Card>
           </Section>
         </>

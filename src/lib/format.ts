@@ -99,3 +99,17 @@ export function money(amount: number): string {
 export function price(amount: number): string {
   return Number.isInteger(amount) ? `₱${amount.toLocaleString('en-US')}` : money(amount);
 }
+
+/** "05/14/1978", "5/14/1978" or "1978-05-14" → "1978-05-14"; null when it is not a real date. */
+export function isoBirthDate(input: string): string | null {
+  const s = input.trim();
+  let y: number, m: number, d: number;
+  const us = /^(\d{1,2})\s*\/\s*(\d{1,2})\s*\/\s*(\d{4})$/.exec(s);
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (us) [m, d, y] = [Number(us[1]), Number(us[2]), Number(us[3])];
+  else if (iso) [y, m, d] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+  else return null;
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) return null;
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}

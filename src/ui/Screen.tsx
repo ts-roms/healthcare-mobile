@@ -95,7 +95,7 @@ export function Header({ title, subtitle, leading = 'back', onLeading, leadingLa
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const fg = color ?? colors.text;
-  const goBack = onLeading ?? (() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/index')));
+  const goBack = onLeading ?? (() => (router.canGoBack() ? router.back() : router.replace('/')));
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + 8 }]}>

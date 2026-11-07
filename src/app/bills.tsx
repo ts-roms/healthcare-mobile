@@ -1,43 +1,57 @@
 import { Link } from 'expo-router';
 import { Check, ReceiptText } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import * as api from '@/data/api';
 import { useApi } from '@/data/useApi';
-import type { Billing, Invoice } from '@/data/types';
-import { formatDateShort, money } from '@/lib/format';
-import { useMe } from '@/lib/me';
-import { Badge, Button, Card, EmptyState, ErrorState, Header, Loading, Screen, SegmentedControl, Text, useTheme } from '@/ui';
+import type { PortalInvoice, PortalOnlinePayment } from '@/data/types';
+import { invoiceStatus, PAYMENT_METHOD, peso, totalDue } from '@/domain/wording';
+import { formatDateShort } from '@/lib/format';
+import { useMe } from '@/lib/session-provider';
+import { Badge, Card, EmptyState, ErrorState, Header, Loading, Notice, Screen, SegmentedControl, Text, useTheme } from '@/ui';
 
+/** Invoices, coverage and payments (`GET /portal/billing`), the deposit balance (`/account`). Amounts are centavos. */
 export default function BillsScreen() {
   const { colors, scheme } = useTheme();
-  const { data, error, reload } = useApi(api.getBilling);
+  const { data, error, reload } = useApi(async () => {
+    const [invoices, accounts, online] = await Promise.all([api.getInvoices(), api.getAccounts(), api.getOnlinePayment()]);
+    return { invoices, accounts, online };
+  });
   const [tab, setTab] = useState<'due' | 'paid'>('due');
 
-  const due = data?.invoices.filter((i) => i.status === 'due') ?? [];
-  const paid = data?.invoices.filter((i) => i.status === 'paid') ?? [];
+  const issued = data?.invoices.filter((i) => i.status === 'issued') ?? [];
+  const due = issued.filter((i) => i.balance > 0);
+  const paid = [...issued.filter((i) => i.balance <= 0), ...(data?.invoices.filter((i) => i.status === 'void') ?? [])];
   const list = tab === 'due' ? due : paid;
+  const owed = data ? totalDue(data.invoices) : 0;
+  const credit = data?.accounts.reduce((s, a) => s + a.balance, 0) ?? 0;
 
   return (
     <Screen header={<Header title="Bills" />} contentStyle={{ gap: 18 }}>
-      {error && !data ? <ErrorState message={error.message} onRetry={reload} /> : null}
+      {error && !data ? <ErrorState message={api.patientMessage(error)} onRetry={reload} /> : null}
       {!data && !error ? <Loading /> : null}
       {data ? (
         <>
-          <View accessible accessibilityLabel={`You owe ${money(data.balance)}. Deposit and credit balance ${money(data.credit)}`} style={[styles.summary, { backgroundColor: scheme === 'dark' ? colors.card : colors.primaryDeep, borderColor: colors.cardBorder, borderWidth: scheme === 'dark' ? 1 : 0, boxShadow: scheme === 'dark' ? undefined : '0 14px 32px rgba(31,77,90,0.3)' }]}>
+          <View
+            accessible
+            accessibilityLabel={`You owe ${peso(owed)}. Deposit and credit balance ${peso(credit)}`}
+            style={[
+              styles.summary,
+              { backgroundColor: scheme === 'dark' ? colors.card : colors.primaryDeep, borderColor: colors.cardBorder, borderWidth: scheme === 'dark' ? 1 : 0, boxShadow: scheme === 'dark' ? undefined : '0 14px 32px rgba(31,77,90,0.3)' },
+            ]}>
             <Text variant="caption" weight={600} color={scheme === 'dark' ? colors.textMuted : 'rgba(255,255,255,0.9)'}>
               You owe
             </Text>
             <Text weight={800} color={scheme === 'dark' ? colors.text : '#FFFFFF'} style={styles.owe}>
-              {money(data.balance)}
+              {peso(owed)}
             </Text>
             <View style={styles.between}>
               <Text variant="caption" color={scheme === 'dark' ? colors.textMuted : 'rgba(255,255,255,0.92)'}>
                 Deposit and credit balance
               </Text>
               <Text variant="caption" weight={700} color={scheme === 'dark' ? colors.text : '#FFFFFF'}>
-                {money(data.credit)}
+                {peso(credit)}
               </Text>
             </View>
           </View>
@@ -53,13 +67,15 @@ export default function BillsScreen() {
           />
 
           {list.length === 0 ? <EmptyState icon={ReceiptText} title={tab === 'due' ? 'Nothing to pay' : 'No paid bills yet'} /> : null}
-          {list.map((inv) => (inv.status === 'due' ? <DueCard key={inv.id} invoice={inv} billing={data} /> : <PaidCard key={inv.id} invoice={inv} />))}
+          {list.map((inv) => (
+            <InvoiceCard key={inv.id} invoice={inv} online={data.online} />
+          ))}
 
           <View style={styles.inline}>
             <Text variant="caption" muted>
               A question about a bill?{' '}
             </Text>
-            <Link href="/messages" asChild>
+            <Link href={{ pathname: '/messages/new', params: { topic: 'billing' } }} asChild>
               <Pressable accessibilityRole="link" hitSlop={10}>
                 <Text variant="caption" weight={600} color={colors.link}>
                   Message billing
@@ -73,42 +89,39 @@ export default function BillsScreen() {
   );
 }
 
-function InvoiceHead({ invoice: inv }: { invoice: Invoice }) {
-  const { timeZone } = useMe();
-  return (
-    <View style={[styles.between, { alignItems: 'flex-start' }]}>
-      <View style={{ flex: 1 }}>
-        <Text weight={700}>{inv.title}</Text>
-        <Text variant="caption" muted>
-          {inv.number} · {formatDateShort(inv.issuedAt, timeZone)}
-        </Text>
-      </View>
-      {inv.status === 'due' ? <Badge label="To pay" tone="warning" /> : <Badge label="Paid" tone="success" icon={Check} />}
-    </View>
-  );
-}
-
-function DueCard({ invoice: inv, billing }: { invoice: Invoice; billing: Billing }) {
+function InvoiceCard({ invoice: inv, online }: { invoice: PortalInvoice; online: PortalOnlinePayment }) {
   const { colors } = useTheme();
+  const { timeZone } = useMe();
+  const status = invoiceStatus(inv);
+  const title = inv.items.length === 1 ? inv.items[0]!.description : `${inv.items.length} services`;
   return (
     <Card size="lg" style={{ gap: 14, padding: 18 }}>
-      <InvoiceHead invoice={inv} />
+      <View style={[styles.between, { alignItems: 'flex-start' }]}>
+        <View style={{ flex: 1 }}>
+          <Text weight={700}>{title}</Text>
+          <Text variant="caption" muted>
+            {inv.invoiceNumber} · {formatDateShort(inv.issuedAt, timeZone)}
+          </Text>
+        </View>
+        <Badge label={status.label} tone={status.tone === 'paid' ? 'success' : status.tone === 'due' ? 'warning' : 'neutral'} icon={status.tone === 'paid' ? Check : undefined} />
+      </View>
       <View style={{ gap: 8 }}>
-        {inv.lines.map((l) => (
-          <View key={l.label} style={styles.between}>
-            <Text variant="bodySm">{l.label}</Text>
-            <Text variant="bodySm">{money(l.amount)}</Text>
-          </View>
+        {inv.items.map((l, i) => (
+          <Line key={`i${i}`} label={l.quantity > 1 ? `${l.description} × ${l.quantity}` : l.description} amount={l.netAmount} />
         ))}
-        {inv.adjustments.map((a) => (
-          <View key={a.label} style={styles.between}>
-            <Text variant="bodySm" color={colors.success.fg}>
-              {a.label}
-            </Text>
-            <Text variant="bodySm" color={colors.success.fg}>
-              {money(a.amount)}
-            </Text>
-          </View>
+        {inv.discounts.map((d, i) => (
+          <Line key={`d${i}`} label={d.name} amount={-d.amount} color={colors.success.fg} />
+        ))}
+        {inv.payers.map((p, i) => (
+          <Line key={`p${i}`} label={`Coverage · ${p.name}`} amount={-p.amount} color={colors.success.fg} />
+        ))}
+        {inv.payments.map((p, i) => (
+          <Line
+            key={`y${i}`}
+            label={`${p.kind === 'refund' ? 'Refunded' : 'Paid'} in ${PAYMENT_METHOD[p.method] ?? p.method}${p.receiptNumber ? ` · ${p.receiptNumber}` : ''}`}
+            amount={p.kind === 'refund' ? p.amount : -p.amount}
+            color={colors.textMuted}
+          />
         ))}
         <View style={{ height: 1, backgroundColor: colors.border }} />
         <View style={styles.between}>
@@ -116,41 +129,34 @@ function DueCard({ invoice: inv, billing }: { invoice: Invoice; billing: Billing
             Balance
           </Text>
           <Text weight={800} style={{ fontSize: 16 }}>
-            {money(inv.balance)}
+            {peso(Math.max(inv.balance, 0))}
           </Text>
         </View>
       </View>
-      {billing.onlinePayment.available ? (
-        <>
-          {/* DEMO: the real button starts the provider's checkout from the portal API. */}
-          <Button label={`Pay ${money(inv.balance)} online`} onPress={() => Alert.alert('Demo', 'In the real app this opens the payment provider’s checkout.')} />
+      {status.tone === 'due' ? (
+        online.available ? (
+          // Paying starts the provider's checkout (`POST /portal/billing/:id/online-payments`) — not built in the app yet.
+          <Notice tone="info">{`${online.name} is available in MyHealth on the web. You can also pay at the clinic cashier.`}</Notice>
+        ) : (
           <Text variant="caption" muted align="center">
-            {billing.onlinePayment.methods}. You can also pay at the clinic cashier.
+            Pay at the clinic’s cashier.
           </Text>
-        </>
-      ) : (
-        <Text variant="caption" muted align="center">
-          Pay at the clinic cashier.
-        </Text>
-      )}
+        )
+      ) : null}
     </Card>
   );
 }
 
-function PaidCard({ invoice: inv }: { invoice: Invoice }) {
+function Line({ label, amount, color }: { label: string; amount: number; color?: string }) {
   return (
-    <Card size="lg" style={{ gap: 12, padding: 18 }}>
-      <InvoiceHead invoice={inv} />
-      <View style={styles.between}>
-        <Text variant="bodySm" muted style={{ flex: 1 }}>
-          {inv.payment ? `Paid in ${inv.payment.method} · receipt ${inv.payment.receiptNo}` : 'Paid'}
-        </Text>
-        <Text variant="bodySm" weight={700}>
-          {money(inv.payment?.amount ?? inv.total)}
-        </Text>
-      </View>
-      {/* Invoice and receipt PDFs need a document endpoint on the portal API (Needs API). */}
-    </Card>
+    <View style={styles.between}>
+      <Text variant="bodySm" color={color} style={{ flex: 1 }}>
+        {label}
+      </Text>
+      <Text variant="bodySm" color={color}>
+        {peso(amount)}
+      </Text>
+    </View>
   );
 }
 

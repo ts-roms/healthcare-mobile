@@ -222,4 +222,4 @@ export const hitSlop = { top: 8, bottom: 8, left: 8, right: 8 };
 export const MIN_TOUCH = 44;
 export const BUTTON_HEIGHT = 52;
 /** Room the floating tab bar takes at the bottom of tab screens. */
-export const TAB_BAR_SPACE = 104;
+export const TAB_BAR_SPACE = 120;

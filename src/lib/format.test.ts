@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatDate, formatMessageTime, formatTime, greeting, isSameClinicDay, money, price, relativeDays } from './format';
+import { formatDate, formatMessageTime, formatTime, greeting, isoBirthDate, isSameClinicDay, money, price, relativeDays } from './format';
 
 const TZ = 'Asia/Manila';
 
@@ -46,5 +46,15 @@ describe('format (clinic time zone)', () => {
     expect(money(-200)).toBe('−₱200.00');
     expect(price(500)).toBe('₱500');
     expect(price(99.5)).toBe('₱99.50');
+  });
+});
+
+describe('isoBirthDate', () => {
+  it('accepts US and ISO forms and refuses impossible dates', () => {
+    expect(isoBirthDate('05/14/1978')).toBe('1978-05-14');
+    expect(isoBirthDate('5 / 4 / 1978')).toBe('1978-05-04');
+    expect(isoBirthDate('1978-05-14')).toBe('1978-05-14');
+    expect(isoBirthDate('02/30/1978')).toBeNull();
+    expect(isoBirthDate('May 14')).toBeNull();
   });
 });

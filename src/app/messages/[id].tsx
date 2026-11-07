@@ -1,47 +1,56 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { View } from 'react-native';
 
-import { SenderAvatar } from '@/components/SenderAvatar';
+import { initialsOf, SenderAvatar } from '@/components/SenderAvatar';
 import * as api from '@/data/api';
 import { useApi } from '@/data/useApi';
+import { messageAction, messageSource } from '@/domain/wording';
 import { formatDate, formatTime } from '@/lib/format';
-import { useMe } from '@/lib/me';
-import { Card, ErrorState, Header, Loading, Screen, Text } from '@/ui';
+import { useMe } from '@/lib/session-provider';
+import { Button, Card, ErrorState, Header, Loading, Screen, Text } from '@/ui';
 
-export default function MessageScreen() {
+/** A clinic notice (read-only; questions go through a new message). Opening it marks it read. */
+export default function NoticeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { timeZone } = useMe();
+  const { me, timeZone } = useMe();
+  const org = me?.organization.name ?? 'Your clinic';
   const { data, error, reload } = useApi(async () => {
-    const all = await api.getMessages();
-    const m = all.find((x) => x.id === id);
+    const m = (await api.getMessages()).find((x) => x.id === id);
     if (!m) throw new Error('This message isn’t available.');
     return m;
   }, [id]);
 
   useEffect(() => {
-    if (data && !data.read) api.markMessageRead(data.id);
+    if (data && !data.readAt) api.markMessageRead(data.id).catch(() => undefined);
   }, [data]);
+
+  const action = data ? messageAction(data) : null;
 
   return (
     <Screen header={<Header title="Message" leadingLabel="Back to messages" />}>
-      {error && !data ? <ErrorState message={error.message} onRetry={reload} /> : null}
+      {error && !data ? <ErrorState message={api.patientMessage(error)} onRetry={reload} /> : null}
       {!data && !error ? <Loading /> : null}
       {data ? (
         <Card size="lg" style={{ gap: 14 }}>
           <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-            <SenderAvatar message={data} />
+            <SenderAvatar kind="clinic" initials={initialsOf(org)} />
             <View style={{ flex: 1 }}>
-              <Text weight={700}>{data.from}</Text>
+              <Text weight={700}>
+                {org} · {messageSource(data)}
+              </Text>
               <Text variant="caption" muted>
-                {formatDate(data.sentAt, timeZone)} · {formatTime(data.sentAt, timeZone)}
+                {formatDate(data.createdAt, timeZone)} · {formatTime(data.createdAt, timeZone)}
               </Text>
             </View>
           </View>
-          <Text variant="section" accessibilityRole="header">
-            {data.subject}
-          </Text>
-          <Text>{data.body}</Text>
+          {data.subject ? (
+            <Text variant="section" accessibilityRole="header">
+              {data.subject}
+            </Text>
+          ) : null}
+          <Text>{data.text}</Text>
+          {action ? <Button label={action.label} variant="secondary" size="md" onPress={() => router.navigate(action.href)} /> : null}
         </Card>
       ) : null}
     </Screen>

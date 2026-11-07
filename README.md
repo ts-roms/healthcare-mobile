@@ -1,76 +1,99 @@
 # MyHealth — patient app (Expo)
 
-The MyHealth patient app, built to the design in `../ui` (`ui/README.md` is the spec, `ui/screens/*.dc.html` the mockups).
-Expo SDK 58, React Native 0.88, expo-router, TypeScript strict.
+The MyHealth patient app, built to the design in `../ui` (`ui/README.md` is the spec, `ui/screens/*.dc.html` the mockups),
+against the Healthcare Platform's MyHealth API (`/api/v1/portal/*`). Expo SDK 58, React Native 0.88, expo-router, TypeScript strict.
 
-> **Demo data.** This project has no portal API client yet. Every screen reads through
-> `src/data/api.ts`, whose functions are named after the `/api/v1/portal/*` endpoint they stand in
-> for and currently return the in-memory data in `src/data/demo.ts`. Replace those bodies with real
-> calls (and delete `demo.ts`) to go live. Nothing is stored on the device.
-
-## Run
+## Set up
 
 ```bash
 pnpm install
-pnpm start          # then press w (web), i (iOS) or a (Android)
+cp .env.example .env.local   # then edit it
+pnpm start                   # scan the QR code with Expo Go
+```
+
+`.env.local` (inlined into the app — never a secret):
+
+| Variable | Meaning |
+| --- | --- |
+| `EXPO_PUBLIC_API_BASE_URL` | The API, e.g. `http://192.168.1.10:3333/api/v1`. From a phone use the computer's LAN address, not `localhost`, and allow the port through the firewall. |
+| `EXPO_PUBLIC_ORGANIZATION_CODE` | The organization this build serves (`organization.code`; the local demo seed uses `SEED_ORG_CODE`). |
+| `EXPO_PUBLIC_PORTAL_BASE_URL` | Optional. MyHealth on the web; online consultations open there (D8). |
+
+Restart Metro (`pnpm start --clear`) after changing it. The web build only works from an origin listed in the API's `CORS_ORIGINS`.
+
+## Checks
+
+```bash
 pnpm typecheck
-pnpm test           # Vitest: formatting, range bar, trend chart and result-wording helpers
+pnpm test        # unit tests: session rules, result wording, formatting, range bar, trend chart
 npx eslint .
 ```
 
-Demo sign-in (dev builds only): the email is prefilled, any password of 8+ characters works, and
-the code is shown under the code boxes. "Simulate a scan" on Activate fills the card details.
+Against a running API (the demo seed's MyHealth account; reads, plus one preference flipped and restored):
 
-## Layout
+```bash
+MYHEALTH_IT_API=http://localhost:3333/api/v1 MYHEALTH_IT_ORG=<org> MYHEALTH_IT_EMAIL=<email> MYHEALTH_IT_PASSWORD=<password> pnpm vitest run src/data/api.int.test.ts
+```
 
-| Path | What |
-| --- | --- |
-| `src/ui/theme.ts` | Design tokens: light/dark palettes, spacing, radii, elevation, Figtree type scale |
-| `src/ui/ThemeProvider.tsx` | `useTheme()`: follows the system, with a System / Light / Dark override (Profile) |
-| `src/ui/*` | Primitives: `Screen`, `PageTitle`, `Header`, `Section`, `Card`, `Button`, `IconButton`, `Chip`/`ChipGroup`, `SegmentedControl`, `Badge`, `ListRow`, `KeyValueRow`, `Switch`, `Checkbox`, `TextField`, `RangeBar`, `TrendChart`, `EmptyState`, `Notice`, `BottomActionBar`, `Avatar`, floating `TabBar` |
-| `src/domain/results.ts` | Result-flag wording (colour + icon + words), grouping, exact allergy wording |
-| `src/lib/format.ts` | Dates in the clinic time zone (from `GET /portal/me`), money |
-| `src/lib/session.tsx` | Demo session (see the rules in its header before wiring real auth) |
-| `src/data/` | `types.ts` (response shapes), `api.ts` (endpoint stand-ins), `demo.ts` (mock data), `useApi` |
-| `src/app/` | Routes (below) |
+## How it talks to the API
+
+- `src/lib/session.ts` — copied from `myhealth-mobile` (its unit tests too): access token in memory, refresh token in
+  `expo-secure-store` (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`), single-flight refresh, sign-out only when the API refuses the session,
+  `X-Acting-For` only on routes that allow it. `src/lib/session-provider.tsx` is the React side (`useSession`, `useMe`).
+- `src/data/api.ts` — one function per endpoint; `src/data/types.ts` mirrors the web portal's response types (D12).
+- `src/domain/portal-results.ts` — copy of `@healthcare/domain/portal-results`: result wording identical to MyHealth on the web.
+  `src/domain/wording.ts` mirrors the web's prescription, bill, notice, booking and notification wording.
+- Nothing about the patient is stored on the device apart from the refresh token (D10). Times use the clinic's zone from
+  `GET /portal/me`; visits use their facility's zone.
 
 ## Screens
 
-| Design # | Route | Status |
-| --- | --- | --- |
-| 01 Sign in + code | `/sign-in` | Built. Fingerprint button left out (D5). "Trust this phone" left out (web-only). |
-| 02 Home | `/(tabs)/index` | Built |
-| 03 Results | `/(tabs)/results` | Built, with the "Outside usual range" filter |
-| 04 Result detail | `/results/[id]` | Built, with the trend chart (per-sample usual range) |
-| 05 Book a visit | `/book` | Built |
-| — Visits tab | `/(tabs)/visits` | Built (upcoming + past, links to Book) |
-| 06 Medicines | `/(tabs)/medicines` | Built: prescriptions and allergies only |
-| 07 Messages | `/(tabs)/messages`, `/messages/[id]` | Built; opening a message marks it read |
-| 08 Profile | `/profile` | Built, with the theme picker and sign-out |
-| 09 Bills | `/bills` | Built; "Pay online" only when `onlinePayment.available` |
-| 10 Notifications | `/notifications` | Channel matrix and "Sent to" built |
-| 11 Check-in QR | `/qr` | Built; QR drawn locally from the key (`qrcode-generator`) |
-| 12 Scan card → activate | `/activate` | Built without a live camera (see below) |
-| 13–14 Online consult, video | `/consult` | Placeholder only — needs D8. Keeps the 911 red-flag copy. |
-| 15–17 Dark | all | Dark tokens applied everywhere |
+| Route | API |
+| --- | --- |
+| `/sign-in` | `POST /portal/auth/login`, `/auth/mfa/verify` (authenticator or recovery code) |
+| `/activate` | `POST /portal/auth/activate` (typed details; card scanning needs a camera — D9) |
+| Home | `/portal/me`, `/appointments`, `/results`, `/prescriptions`, `/teleconsults`, `/messages` |
+| Results, `/results/[testId]` | `/portal/results`, `/portal/results/trend` (chart + history with each value's range) |
+| Visits | `/portal/appointments`, `POST /portal/appointments/:id/cancel` |
+| `/book` | `/portal/booking/options`, `/booking/slots`, `POST /portal/appointments` |
+| Medicines | `/portal/prescriptions` |
+| Messages, `/messages/[id]`, `/messages/thread/[id]`, `/messages/new` | `/portal/messages` (+ read), `/portal/message-threads` (list, open, start, reply) |
+| `/profile`, `/bills` | `/portal/me`; `/portal/billing`, `/billing/account`, `/billing/online-payment` |
+| `/notifications` | `/portal/push` (this phone: on, test, off; devices), `GET/PUT /portal/communication-preferences` |
+| `/qr` | `/portal/qr` (drawn on the phone from the key) |
+| `/consult` | `/portal/teleconsults`; continues in MyHealth on the web (D8) |
 
-### Needs API (left out, not faked)
+## Push notifications (D6)
 
-- Medicine "Today" check-offs, the "Reminders on" pill, and the "Supply left" bar.
-- Health-facts explainer per test and "Down 1.2 points since…" on result detail.
-- Result search; result/invoice/receipt/e-prescription PDFs ("Share or download", "Invoice PDF"…).
-- Compose a new message ("New message"); the API only lists and marks read.
-- Change or cancel a booked visit.
-- Edit contact details from the app.
-- `src/data/types.ts` is modelled on the screens — check every field against `docs/architecture/portal-app.md`.
+Ported from `myhealth-mobile` (`src/lib/push.ts`, `native-push.ts`, unit-tested): the app registers its Expo push token through
+`POST /portal/push/mobile-devices`; tapping a notice opens the matching screen (`src/lib/push-route.ts`); signing out unregisters the
+phone first. To receive them you need all of:
 
-### Needs decision
+1. **A development or store build** — Expo Go cannot receive remote push (the screen says so). `npx eas-cli@latest build --profile development`.
+2. **An Expo project id** — `npx eas-cli@latest init`, or `EAS_PROJECT_ID` (read by `app.config.ts`).
+3. **Push turned on at the API** — `EXPO_PUSH_ENABLED=true` on the API and the notification worker (off in the local setup, so the
+   screen says the clinic hasn't turned them on).
+4. For Android store builds, the organization's Firebase credentials uploaded to the Expo project.
 
-- **D5** biometric unlock ("Use fingerprint").
-- **D8** online consultation in the app vs. MyHealth in the browser (screens 13–14).
-- **D9** device permissions: camera for the card scan (`expo-camera`), calendar for "Add to calendar", push for medicine reminders and "Send a test notification" (`expo-notifications`).
-- Storage module for the theme override (expo-secure-store or AsyncStorage); it is in memory for now.
+The project is ready for this: `eas.json` has `development` (dev client, installable APK), `preview` and `production` profiles;
+`app.json` names the app `ph.healthcare.myhealth` on Android and iOS; `expo-dev-client` is installed; and the local API's `.env` has
+`EXPO_PUSH_ENABLED=true` (restart the API and the notification worker after changing it). What is left needs your Expo account:
 
-### Not in this build yet
+```bash
+npx eas-cli@latest login                                   # once, with your Expo account
+npx eas-cli@latest init                                    # links this folder to an Expo project (writes the project id)
+npx eas-cli@latest credentials                             # Android → set up push (FCM V1) with the Firebase service account key
+npx eas-cli@latest build --profile development --platform android
+```
 
-Forms to sign (`/forms`), People I care for (`/people`) and the acting-for banner, Privacy and consents, and Security settings screens.
+Install the APK it links to on the phone, then `pnpm start` (it opens the development build instead of Expo Go). In the app:
+Profile → Notifications → turn on "This phone", then "Send a test". An iPhone build needs an Apple Developer account
+(`--platform ios`, then register the device with `eas device:create`).
+
+### Left out (no API, or waiting on a decision)
+
+- Medicine check-offs, reminders, "Supply left", and an allergy card (no patient allergy endpoint).
+- Result search; PDFs (result reports, invoices, receipts — endpoints exist, not built in the app); reschedule; paying online; attachments.
+- Forms, People/acting-for,
+  Privacy, email and two-step verification settings (on the web).
+- D5 biometric unlock, D8 telemedicine in the app, D9 camera/calendar.

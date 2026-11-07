@@ -1,14 +1,17 @@
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
-import type { Appointment } from '@/data/types';
+import type { PortalAppointment } from '@/data/types';
+import { APPOINTMENT_STATUS } from '@/domain/wording';
 import { formatTime, partsInZone, relativeDays } from '@/lib/format';
 import { Button, Text, useTheme } from '@/ui';
 
-type Props = { appointment: Appointment; timeZone: string; now: Date; action?: { label: string; onPress: () => void } };
+type Action = { label: string; onPress: () => void };
+type Props = { appointment: PortalAppointment; now: Date; action?: Action; secondary?: Action };
 
-/** Teal hero card for the next booked visit (bordered card in dark mode). */
-export function NextVisitCard({ appointment: a, timeZone, now, action }: Props) {
+/** Teal hero card for the next booked visit (bordered card in dark mode). Times are in the visit's own facility zone. */
+export function NextVisitCard({ appointment: a, now, action, secondary }: Props) {
+  const timeZone = a.timeZone;
   const { colors, shadow } = useTheme();
   const h = colors.hero;
   const p = partsInZone(a.startsAt, timeZone);
@@ -16,7 +19,7 @@ export function NextVisitCard({ appointment: a, timeZone, now, action }: Props) 
 
   return (
     <View
-      accessibilityLabel={`Your next visit, ${when}: ${a.service} with ${a.doctorName}, ${p.weekday} ${p.day} ${p.month} at ${formatTime(a.startsAt, timeZone)}, ${a.location}`}
+      accessibilityLabel={`Your next visit, ${when}: ${a.visitType} with ${a.practitionerName}, ${p.weekday} ${p.day} ${p.month} at ${formatTime(a.startsAt, timeZone)}, ${a.modality === 'telemedicine' ? 'online' : a.facilityName}`}
       style={[styles.card, { backgroundColor: h.bg, borderColor: h.border, borderWidth: h.border === 'transparent' ? 0 : 1, boxShadow: shadow.hero }]}>
       {h.border === 'transparent' ? (
         <>
@@ -30,7 +33,7 @@ export function NextVisitCard({ appointment: a, timeZone, now, action }: Props) 
         </Text>
         <View style={[styles.pill, { backgroundColor: h.pillBg }]}>
           <Text variant="small" weight={700} color={h.pillFg}>
-            Booked
+            {APPOINTMENT_STATUS[a.status]}
           </Text>
         </View>
       </View>
@@ -48,22 +51,23 @@ export function NextVisitCard({ appointment: a, timeZone, now, action }: Props) 
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           <Text weight={700} color={h.fg} style={{ fontSize: 17, lineHeight: 22 }}>
-            {a.service === 'Follow-up consultation' ? 'Follow-up' : a.service} with {a.doctorName}
+            {a.visitType} with {a.practitionerName}
           </Text>
           <Text variant="bodySm" color={h.fgMuted}>
-            {formatTime(a.startsAt, timeZone)} · {a.mode === 'online' ? 'Online' : a.location} · {a.specialty}
+            {formatTime(a.startsAt, timeZone)} · {a.modality === 'telemedicine' ? 'Online' : a.facilityName}
           </Text>
         </View>
       </View>
-      {a.instructions ? (
+      {a.reason ? (
         <View style={[styles.note, { backgroundColor: h.noteBg }]}>
           <Text variant="bodySm" color={h.noteFg}>
-            {a.instructions}
+            Reason: {a.reason}
           </Text>
         </View>
       ) : null}
       <View style={styles.actions}>
         <Button label={action?.label ?? 'See my visits'} size="md" colors={{ bg: h.primaryBg, fg: h.primaryFg }} style={{ flex: 1 }} onPress={action?.onPress ?? (() => router.navigate('/visits'))} />
+        {secondary ? <Button label={secondary.label} size="md" variant="secondary" colors={{ bg: 'transparent', fg: h.fg, border: h.secondaryBorder }} style={{ flex: 1 }} onPress={secondary.onPress} /> : null}
         {/* "Add to calendar" needs expo-calendar and a calendar permission (decision D9). */}
       </View>
     </View>
