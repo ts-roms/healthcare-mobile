@@ -18,18 +18,24 @@ export function useApi<T>(load: () => Promise<T>, deps: readonly unknown[] = [])
   });
   const key = JSON.stringify(deps);
 
-  const run = useCallback(() => {
+  const run = useCallback((quiet?: boolean) => {
     const id = ++seq.current;
-    setState((s) => ({ ...s, loading: true, error: undefined }));
+    if (quiet !== true) setState((s) => ({ ...s, loading: true, error: undefined }));
     loadRef.current().then(
       (data) => id === seq.current && setState({ data, error: undefined, loading: false }),
-      (error: Error) => id === seq.current && setState((s) => ({ ...s, error, loading: false })),
+      // A quiet re-read that fails keeps what is shown; the next one tries again.
+      (error: Error) => id === seq.current && setState((s) => (quiet === true && s.data !== undefined ? s : { ...s, error, loading: false })),
     );
     // `key` stands for `deps`; re-create the loader when the inputs change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  useFocusEffect(run);
+  useFocusEffect(useCallback(() => run(), [run]));
 
-  return { ...state, reload: run, setData: (data: T) => setState((s) => ({ ...s, data })) };
+  return {
+    ...state,
+    reload: useCallback(() => run(), [run]),
+    /** Re-reads without showing the loading state (live updates). */
+    refresh: useCallback(() => run(true), [run]),
+    setData: (data: T) => setState((s) => ({ ...s, data })) };
 }

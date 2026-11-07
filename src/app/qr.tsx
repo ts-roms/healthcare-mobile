@@ -6,16 +6,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { QrCodeView } from '@/components/QrCodeView';
 import * as api from '@/data/api';
 import { useApi } from '@/data/useApi';
-import { formatDateShort } from '@/lib/format';
-import { useMe } from '@/lib/me';
-import { Badge, ErrorState, Header, Loading, Text, useTheme } from '@/ui';
+import { useMe } from '@/lib/session-provider';
+import { ErrorState, Header, Loading, Text, useTheme } from '@/ui';
 
 const LIGHT_TEXT = '#14252F';
 
 export default function QrScreen() {
   const { colors, scheme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { me, timeZone } = useMe();
+  const { me } = useMe();
   const { data, error, reload } = useApi(api.getCheckInQr);
   // The teal page stays teal in dark mode (darker), and the code always sits on white so scanners read it.
   const bg = scheme === 'dark' ? '#17697A' : colors.primary;
@@ -28,32 +27,34 @@ export default function QrScreen() {
           Show this at reception or the kiosk to find your record and check in.
         </Text>
         <View style={styles.card}>
-          {error && !data ? <ErrorState message={error.message} onRetry={reload} /> : null}
+          {error && !data ? <ErrorState message={api.patientMessage(error)} onRetry={reload} /> : null}
           {!data && !error ? <Loading /> : null}
-          {data ? (
+          {data && !data.payload ? (
+            <Text color={LIGHT_TEXT} align="center">
+              {data.enabled ? 'The clinic hasn’t issued you a check-in code yet. Ask at the desk.' : 'Your clinic doesn’t use check-in QR codes. Give your patient number at the desk: '}
+              {data.enabled ? null : <Text weight={700} color={LIGHT_TEXT}>{data.patientNumber}</Text>}
+            </Text>
+          ) : null}
+          {data?.payload ? (
             <>
               <View accessible accessibilityRole="image" accessibilityLabel="QR code for checking in">
-                {/* Rendered from the key only — never from an activation link. */}
-                <QrCodeView value={data.key} />
+                {/* Drawn on the phone from the check-in key only — never the activation link. */}
+                <QrCodeView value={data.payload} />
               </View>
               <View style={{ alignItems: 'center', gap: 2 }}>
                 <Text weight={800} color={LIGHT_TEXT} style={{ fontSize: 18, lineHeight: 24 }}>
-                  {me?.patient.fullName}
+                  {me?.patient.displayName}
                 </Text>
                 <Text variant="bodySm" color="#4A5C66">
-                  {me?.patient.number} · {me?.clinic.organization}
+                  {data.patientNumber} · {me?.organization.name}
                 </Text>
               </View>
-              {data.status === 'active' ? (
-                <View style={styles.status}>
-                  <Check size={14} color="#1E6B3A" strokeWidth={2.6} />
-                  <Text variant="caption" weight={600} color="#1E6B3A">
-                    Active · issued {formatDateShort(data.issuedAt, timeZone)}
-                  </Text>
-                </View>
-              ) : (
-                <Badge label="No longer active" tone="danger" />
-              )}
+              <View style={styles.status}>
+                <Check size={14} color="#1E6B3A" strokeWidth={2.6} />
+                <Text variant="caption" weight={600} color="#1E6B3A">
+                  Active
+                </Text>
+              </View>
             </>
           ) : null}
         </View>
@@ -68,7 +69,7 @@ export default function QrScreen() {
           <Text variant="bodySm" color="#FFFFFF" style={{ opacity: 0.95 }}>
             Lost your clinic card?{' '}
           </Text>
-          <Link href="/messages" asChild>
+          <Link href={{ pathname: '/messages/new', params: { topic: 'other', subject: 'Replace my clinic card' } }} asChild>
             <Pressable accessibilityRole="link" hitSlop={8}>
               <Text variant="bodySm" weight={700} color="#FFFFFF" style={{ textDecorationLine: 'underline' }}>
                 Ask the clinic to replace it

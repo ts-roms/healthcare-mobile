@@ -8,9 +8,11 @@
     "scheme": "myhealth",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "ph.healthcare.myhealth"
     },
     "android": {
+      "package": "ph.healthcare.myhealth",
       "adaptiveIcon": {
         "backgroundColor": "#E0F2F2",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -35,11 +37,29 @@
             "backgroundColor": "#0D1A1F"
           }
         }
+      ],
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#1E7A8C"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f6f095fe-fdd7-4503-973b-58b93d186e01"
+      },
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      }
+    },
+    "owner": "iamromss-team"
   }
 }

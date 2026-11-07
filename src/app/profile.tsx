@@ -5,19 +5,19 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import * as api from '@/data/api';
 import { useApi } from '@/data/useApi';
-import { money } from '@/lib/format';
-import { useMe } from '@/lib/me';
-import { useSession } from '@/lib/session';
+import { peso, totalDue } from '@/domain/wording';
+import { formatDateShort } from '@/lib/format';
+import { useMe, useSession } from '@/lib/session-provider';
 import { Avatar, Badge, Button, Card, Header, KeyValueRow, ListRow, Loading, Screen, Section, SegmentedControl, Text, useTheme, type ThemeOverride } from '@/ui';
 
 export default function ProfileScreen() {
   const { colors, scheme, shadow, override, setOverride } = useTheme();
   const { me } = useMe();
   const { signOut } = useSession();
-  const billing = useApi(api.getBilling);
+  const billing = useApi(api.getInvoices);
 
-  const due = billing.data?.invoices.filter((i) => i.status === 'due') ?? [];
-  const billsSubtitle = billing.data ? (due.length ? `${due.length} bill${due.length > 1 ? 's' : ''} to pay · ${money(billing.data.balance)}` : 'Nothing to pay') : ' ';
+  const due = billing.data?.filter((i) => i.status === 'issued' && i.balance > 0) ?? [];
+  const billsSubtitle = billing.data ? (due.length ? `${due.length} bill${due.length > 1 ? 's' : ''} to pay · ${peso(totalDue(billing.data))}` : 'Nothing to pay') : ' ';
 
   return (
     <Screen header={<Header title="Profile" leadingLabel="Back to home" />}>
@@ -27,28 +27,30 @@ export default function ProfileScreen() {
         <>
           <Card size="lg" style={{ gap: 14 }}>
             <View style={styles.who}>
-              <Avatar initials={me.patient.initials} size={60} bg={scheme === 'dark' ? colors.primarySubtle : colors.primaryDeep} fg={scheme === 'dark' ? colors.primaryDeep : '#FFFFFF'} />
+              <Avatar initials={`${me.patient.givenName[0] ?? ''}${me.patient.familyName[0] ?? ''}`.toUpperCase()} size={60} bg={scheme === 'dark' ? colors.primarySubtle : colors.primaryDeep} fg={scheme === 'dark' ? colors.primaryDeep : '#FFFFFF'} />
               <View style={{ flex: 1 }}>
                 <Text weight={800} style={{ fontSize: 19, lineHeight: 24 }}>
-                  {me.patient.fullName}
+                  {me.patient.displayName}
                 </Text>
                 <Text variant="caption" muted>
-                  Patient no. {me.patient.number} · {me.clinic.organization}
+                  Patient no. {me.patient.patientNumber} · {me.organization.name}
                 </Text>
               </View>
             </View>
             <View style={{ marginHorizontal: -16 }}>
-              <KeyValueRow label="Mobile" value={me.contact.mobileMasked} divider={false} />
+              <KeyValueRow label="Date of birth" value={formatDateShort(`${me.patient.birthDate}T12:00:00Z`, 'UTC')} divider={false} />
               <KeyValueRow label="Email" divider={false}>
                 <View style={styles.email}>
                   <Text variant="bodySm" weight={600}>
-                    {me.contact.emailMasked}
+                    {me.account.email}
                   </Text>
-                  {!me.contact.emailVerified ? <Badge label="Not verified" tone="warning" size="sm" /> : null}
+                  {!me.account.emailVerified ? <Badge label="Not verified" tone="warning" size="sm" /> : null}
                 </View>
               </KeyValueRow>
             </View>
-            {/* "Edit contact details" — the portal edits contacts on the web; no mobile endpoint listed (Needs API). */}
+            <Text variant="caption" muted>
+              To change your details, ask the clinic. Email and sign-in security are managed in MyHealth on the web.
+            </Text>
           </Card>
 
             <Pressable accessibilityRole="link" accessibilityLabel="My check-in QR code. Show it at the desk or kiosk" onPress={() => router.push('/qr')} style={({ pressed }) => [styles.qr, { backgroundColor: colors.primary, boxShadow: shadow.primary, opacity: pressed ? 0.9 : 1 }]}>
@@ -69,8 +71,8 @@ export default function ProfileScreen() {
           <Section title="Account" eyebrow>
             <Card padded={false}>
               <ListRow divider={false} title="Bills and payments" subtitle={billsSubtitle} href="/bills" />
-              <ListRow title="Notifications" subtitle="Push, text and email" href="/notifications" />
-              <ListRow title="Security" subtitle={`Two-step verification ${me.security.mfaEnabled ? 'on' : 'off'}${me.security.passkeys ? ` · ${me.security.passkeys} passkey${me.security.passkeys > 1 ? 's' : ''}` : ''}`} trailing={<Badge label={me.security.mfaEnabled ? 'On' : 'Off'} tone={me.security.mfaEnabled ? 'success' : 'warning'} size="sm" />} />
+              <ListRow title="Notifications" subtitle="This phone, text and email" href="/notifications" />
+              <ListRow title="Security" subtitle={`Two-step verification ${me.account.mfaEnabled ? 'on' : 'off'} · change it on the web`} trailing={<Badge label={me.account.mfaEnabled ? 'On' : 'Off'} tone={me.account.mfaEnabled ? 'success' : 'warning'} size="sm" />} />
               {/* People I care for (/people) and Privacy and consents are not in this build yet. */}
             </Card>
           </Section>

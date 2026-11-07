@@ -3,12 +3,12 @@ import { FlaskConical, Info } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { ResultRow, spokenResult } from '@/components/ResultCards';
+import { ResultRow, resultHref, spokenResult } from '@/components/ResultCards';
 import * as api from '@/data/api';
 import { useApi } from '@/data/useApi';
 import { groupResults } from '@/domain/results';
 import { formatDate } from '@/lib/format';
-import { useMe } from '@/lib/me';
+import { useMe } from '@/lib/session-provider';
 import { Card, ChipGroup, EmptyState, ErrorState, Loading, Notice, PageTitle, Screen, Text } from '@/ui';
 
 type Filter = 'all' | 'outside';
@@ -17,7 +17,7 @@ export default function ResultsScreen() {
   const { timeZone } = useMe();
   const [filter, setFilter] = useState<Filter>('all');
   const { data, error, reload } = useApi(api.getResults);
-  // Search is in the design, but GET /portal/results has no search parameter yet (Needs API).
+  // Search is in the design, but GET /portal/results has no search parameter (Needs API).
 
   const groups = data ? groupResults(data, filter) : [];
 
@@ -47,15 +47,15 @@ export default function ResultsScreen() {
         <View key={g.key} style={{ gap: 10 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
             <Text weight={700} accessibilityRole="header">
-              {formatDate(g.collectedAt, timeZone)}
+              {g.collectedAt ? formatDate(g.collectedAt, timeZone) : 'Date not recorded'}
             </Text>
             <Text variant="caption" muted>
-              Lab order {g.orderNo}
+              Lab order {g.orderNumber}
             </Text>
           </View>
           <Card padded={false}>
             {g.items.map((r, i) => (
-              <Link key={r.id} href={{ pathname: '/results/[id]', params: { id: r.id } }} asChild>
+              <Link key={r.id} href={resultHref(r)} asChild>
                 <Pressable accessibilityRole="link" accessibilityLabel={spokenResult(r)}>
                   {({ pressed }) => (
                     <View style={{ opacity: pressed ? 0.7 : 1 }}>
