@@ -7,7 +7,7 @@ import { hasRangeBar } from '@/components/ResultCards';
 import * as api from '@/data/api';
 import { useApi } from '@/data/useApi';
 import type { PortalResult } from '@/data/types';
-import { resultValue, usualRange } from '@/domain/portal-results';
+import { resultExplanation, resultValue, usualRange } from '@/domain/portal-results';
 import { flagCopy, rangeShort } from '@/domain/results';
 import { formatDate, formatTime, partsInZone } from '@/lib/format';
 import { useMe } from '@/lib/session-provider';
@@ -15,7 +15,10 @@ import { BottomActionBar, Button, Card, ErrorState, Header, Loading, RangeBar, S
 
 const when = (r: PortalResult) => r.collectedAt ?? r.releasedAt ?? '';
 
-/** One test over time (`GET /portal/results/trend?testId=`): the latest value, the trend and every value with its range at the time. */
+/**
+ * One test over time (`GET /portal/results/trend?testId=`): the latest value, explained in the platform's fixed wording
+ * (`resultExplanation`, the same sentences as MyHealth on the web), the trend and every value with its range at the time.
+ */
 export default function ResultDetailScreen() {
   const { id: testId } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
@@ -84,6 +87,17 @@ export default function ResultDetailScreen() {
                 {usualRange(r)}
               </Text>
             ) : null}
+          </Card>
+
+          <Card size="lg" style={{ gap: 10 }}>
+            <Text variant="cardTitle" accessibilityRole="header">
+              About this result
+            </Text>
+            {resultExplanation(r).map((sentence) => (
+              <Text key={sentence} color={colors.textBody}>
+                {sentence}
+              </Text>
+            ))}
           </Card>
 
           <Card size="lg" style={{ gap: 10, paddingHorizontal: 16, paddingTop: 18, paddingBottom: 14 }}>
