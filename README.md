@@ -41,7 +41,9 @@ MYHEALTH_IT_API=http://localhost:3333/api/v1 MYHEALTH_IT_ORG=<org> MYHEALTH_IT_E
   `expo-secure-store` (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`), single-flight refresh, sign-out only when the API refuses the session,
   `X-Acting-For` only on routes that allow it. `src/lib/session-provider.tsx` is the React side (`useSession`, `useMe`).
 - `src/data/api.ts` — one function per endpoint; `src/data/types.ts` mirrors the web portal's response types (D12).
-- `src/domain/portal-results.ts` — copy of `@healthcare/domain/portal-results`: result wording identical to MyHealth on the web.
+- `src/domain/portal-results.ts` — copy of `@healthcare/domain/portal-results`: result wording identical to MyHealth on the web,
+  including `resultExplanation` ("About this result"; version `RESULT_WORDING_VERSION`, which each organization reviews as the
+  compliance area "Results shown to patients" — change a sentence only together with the platform's copy and its version).
   `src/domain/wording.ts` mirrors the web's prescription, bill, notice, booking and notification wording.
 - Nothing about the patient is stored on the device apart from the refresh token (D10). Times use the clinic's zone from
   `GET /portal/me`; visits use their facility's zone.
@@ -53,7 +55,7 @@ MYHEALTH_IT_API=http://localhost:3333/api/v1 MYHEALTH_IT_ORG=<org> MYHEALTH_IT_E
 | `/sign-in` | `POST /portal/auth/login`, `/auth/mfa/verify` (authenticator or recovery code) |
 | `/activate` | `POST /portal/auth/activate` (typed details; card scanning needs a camera — D9) |
 | Home | `/portal/me`, `/appointments`, `/results`, `/prescriptions`, `/teleconsults`, `/messages` |
-| Results, `/results/[testId]` | `/portal/results`, `/portal/results/trend` (chart + history with each value's range) |
+| Results, `/results/[testId]` | `/portal/results`, `/portal/results/trend` (About this result, chart + history with each value's range) |
 | Visits | `/portal/appointments`, `POST /portal/appointments/:id/cancel` |
 | `/book` | `/portal/booking/options`, `/booking/slots`, `POST /portal/appointments` |
 | Medicines | `/portal/prescriptions` |
